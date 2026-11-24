@@ -2,7 +2,9 @@
 
 WHISPERS turns recordings into text you can read, search and quote, works out
 who was speaking, and measures how similar a voice is to someone you already
-have a reference for.
+have a reference for. It also translates foreign-language documents, emails and
+chats into English, including forensic reports from Cellebrite and AXIOM, so
+you can see what needs a linguist.
 
 Analysis happens entirely on the machine in front of you. Nothing is uploaded,
 no recording or transcript leaves the machine, and no cloud service is involved
@@ -30,9 +32,10 @@ background and follows the order you would actually work in.
 7. [Reference voices: Speaker Profiles](#7-reference-voices-speaker-profiles)
 8. [Comparing a voice: Compare Speakers](#8-comparing-a-voice-compare-speakers)
 9. [Comparison History](#9-comparison-history)
-10. [Live and Translate](#10-live-and-translate)
-11. [When something goes wrong](#11-when-something-goes-wrong)
-12. [What the results do and do not mean](#12-what-the-results-do-and-do-not-mean)
+10. [Live](#10-live)
+11. [Translating documents, emails and chats](#11-translating-documents-emails-and-chats)
+12. [When something goes wrong](#12-when-something-goes-wrong)
+13. [What the results do and do not mean](#13-what-the-results-do-and-do-not-mean)
 
 ---
 
@@ -67,9 +70,10 @@ of the window.
 
 ### Coming from Azhi or Sotto
 
-WHISPERS is the same tool under its first name, now an acronym: Workstation for Human-language Intelligence: Speech Processing, Exploitation, Reporting & Screening.
-It was called Azhi, and before that Sotto, for a while. [`name.md`](name.md)
-says why each word of the name is there.
+WHISPERS is the same tool under its first name, now an acronym: Workstation
+for Human-language Intelligence: Speech Processing, Exploitation, Reporting &
+Screening. It was called Azhi, and before that Sotto, for a while.
+[`name.md`](name.md) says why each word of the name is there.
 
 Nothing you saved is lost. The first time WHISPERS starts on a machine, it moves
 the Azhi (or Sotto) settings folder across, with its speaker profiles,
@@ -90,7 +94,7 @@ includes:
 | **Compare Speakers** | Measuring a voice against one of those references. |
 | **Comparison History** | Every comparison this copy has run. |
 | **Live** | Transcribing a stream or a microphone as it happens. A stream is the one thing that uses the network. |
-| **Translate** | Translating text, and pulling text out of images and PDFs. |
+| **Translate** | Translating documents, emails and chats into English, including forensic reports, and pulling text out of images and PDFs. |
 
 The green **Local processing** marker in the header means the analysis is done
 here: the models run on this machine and nothing is sent anywhere.
@@ -111,12 +115,12 @@ Everything most people need is in the **Options** card:
 - **Language** — leave on **Auto** unless it guesses wrong, which happens on
   very short or very noisy recordings.
 - **Quality** — how hard the tool works at hearing. The dropdown says what
-  each choice means and names the model behind it: *Fast — base.en*,
-  *Balanced — small.en*, *More thorough — medium.en*, *Thorough and quick —
-  turbo*, *Most thorough, slowest — large-v3*. Slower means better on hard
+  each choice means and names the model behind it: *Fast (base.en)*,
+  *Balanced (small.en)*, *More thorough (medium.en)*, *Thorough and quick
+  (turbo)*, *Most thorough, slowest (large-v3)*. Slower means better on hard
   audio, and the difference on a poor phone line is large.
 
-  **Leave it on the default** — *More thorough — medium* — unless you have a
+  **Leave it on the default**, *More thorough (medium)*, unless you have a
   reason. That default is a deliberate choice: the recordings this tool is
   used on are mostly poor, and medium earns its extra time on them. Drop to
   *Fast* when the audio is clean and you want the run over quickly, and step
@@ -124,7 +128,9 @@ Everything most people need is in the **Options** card:
 
   The `.en` models are English only. Non-English audio needs one of the plain
   names (`small`, `medium`, `large-v3`, `turbo`). A note under the box says
-  whether your pick is actually in this build.
+  whether your pick is actually in this build. **Use a model folder…** loads a
+  model kept in a folder on this machine, if your administrator has supplied
+  one.
 - **Identify who is speaking** — tick this to label who said what. See the
   next section.
 - **Save a copy to a folder** — where to write the `.txt` (and `.srt`) output.
@@ -138,7 +144,7 @@ you need it. What is in there:
 
 | Card | Holds |
 | --- | --- |
-| **Audio and output** | Skip silence, noise reduction, the easier-to-listen-to copy, low-confidence highlighting, `.srt` subtitles, video conversion |
+| **Audio and output** | Skip silence, noise reduction, the easier-to-listen-to copy, video conversion, what is saved (`.srt` subtitles, a spreadsheet, times on each line, analyst notes), blank lines between lines, low-confidence highlighting |
 | **Language and vocabulary** | **Task** (*transcribe* keeps the language, *translate* produces English — with **medium** or **large-v3** only: *turbo* and the *.en* models cannot translate, and the run is refused with them), **Expected words**, and **Keep hesitations, repeats and false starts** (English) |
 | **Speaker separation** | Method and grouping sensitivity — used only when *Identify who is speaking* is on |
 | **Processing hardware** | Usually just says **CPU** — see below |
@@ -320,7 +326,7 @@ most useful thing you can tell it, and getting it wrong is expensive.
 - **If you know the number, give it.** A two-person phone call transcribed as
   five speakers is the most common disappointment with this tool, and saying
   "2 people" prevents it outright.
-- **Not sure — work it out** lets the tool decide. Use it when you genuinely do
+- **Not sure (work it out)** lets the tool decide. Use it when you genuinely do
   not know, and expect to check the result.
 
 When you give a count, **Speaker names (optional)** fields appear. Fill them in
@@ -328,8 +334,9 @@ and the transcript comes out with real names rather than `SPEAKER_00`.
 
 ### If the split comes out wrong
 
-Use **Redo speaker separation…** under the transcript. It splits the existing
-transcript again with a different number — **without transcribing it all over
+Use **Redo speaker separation…** under the transcript, choose the number under
+**Try instead**, and press **Redo separation**. It splits the existing
+transcript again with that number — **without transcribing it all over
 again**, which on a long recording is the difference between a minute and an
 hour.
 
@@ -396,15 +403,26 @@ suggestion reads like this, on screen and in every saved file:
 > [Viktor Marchenko (unconfirmed voice lead)] I'll be there at nine.
 
 That is a lead from voice similarity — not an identification, and not a
-finding. To confirm it, click the speaker tag and choose **Confirm**, having
-listened to a line; to correct it, type the right name. Until you do, the
-marker stays, every saved file explains what it means, nothing is learned from
+finding. To deal with it, click the speaker tag and choose **Confirm or
+correct '…'**:
+
+- **Play a line** first, every time.
+- **Confirm – I have listened** if it is them.
+- If it is not, type the right name under **Not them? Type the right name:**
+  and press **Use the name I typed**.
+- **Leave as a suggestion** changes nothing.
+
+Until you confirm or correct it, the marker stays, every saved file explains what it means, nothing is learned from
 that speaker, and it cannot be saved to a subject. A turn shorter than three
 seconds is never given a suggestion at all.
 
 Names you confirm or correct are learned for next time. Samples learned this
 way still wait for your approval before they count as a reference — see
 [section 7](#7-reference-voices-speaker-profiles).
+
+The buttons beside the profile are **New…**, **Save** (keeps the current
+settings in it), **Export…** and **Import…** (to move a profile to another
+machine) and **Delete profile…**.
 
 Leave it alone if you only work one case at a time. It earns its place when
 you are moving between several.
@@ -558,7 +576,7 @@ and each transcript appears as it finishes.
 
 While recordings are queued, a file you choose or drop **joins the queue**, and
 the queue is what runs. A file you had already chosen before adding a folder
-joins it too. **Clear** empties the queue and returns to single files.
+joins it too. **Clear list** empties the queue and returns to single files.
 
 **Two recordings with the same name do not overwrite each other.** A case
 folder often holds `2026-09-01/interview.wav` and `2026-09-02/interview.wav`;
@@ -591,7 +609,7 @@ comparison is worth.
 2. **Add a recording** — a historical recording containing them.
 3. Answer **Which speech is the subject?**
    - *The whole recording is this subject* — for a recording of them alone.
-   - *Several people — separate speakers and let me pick* — for a conversation.
+   - *Several people: separate speakers and let me pick* — for a conversation.
      Say **How many people?** if you know; on a long or poor recording that
      keeps one voice from being split in two. *Not sure* lets the tool decide.
      You then pick which speaker is them. Each speaker has **▶ Play sample**
@@ -611,6 +629,7 @@ comparison is worth.
 where it came from. The summary above it says how much **Reference speech**
 the profile has, how many **Trusted samples**, and which **Voice model**
 measured them. **Remove sample** takes out anything you are not happy with.
+**Delete profile** removes the subject and all its samples, after asking.
 
 The voice model matters. A profile made by a different model is **always
 refused** for comparison rather than measured anyway — the number would be
@@ -629,14 +648,24 @@ and nothing later will point back at it as the reason.
 ### For a conversation, the easier route
 
 Transcribe it first with **Identify who is speaking** on, correct the speaker
-tags there, then use **Save speaker to profile…** under the transcript. It is
-usually less work than picking spans by hand.
+tags there, then use **Save speaker to profile…** under the transcript. Choose
+**A new subject** or **An existing subject**, then **Add samples**. It is
+usually less work than picking spans by hand, and the samples still wait for
+your review.
 
 ### Moving profiles between machines
 
 **Export…** writes a profile to a file; **Import…** reads one in. Both are
 offline. A profile contains voice measurements and the case information you
 typed — treat the file with the same care as the recordings it came from.
+
+If the subject being imported is already on this machine, you choose:
+
+- **Keep both**, the safe choice: nothing is lost, and you can delete
+  whichever copy you decide against;
+- **Replace**, which discards the copy on this machine, with any samples the
+  imported file does not have;
+- **Skip it**, which leaves this machine's copy as it is.
 
 ---
 
@@ -682,7 +711,7 @@ those the number would be noise.
 A score out of 1.00 is shown alongside the band. It is a similarity
 measurement. It is **not** a percentage, not a probability, and not a
 likelihood that the two recordings contain the same person — see
-[section 12](#12-what-the-results-do-and-do-not-mean).
+[section 13](#13-what-the-results-do-and-do-not-mean).
 
 ### Window by window
 
@@ -753,19 +782,34 @@ record.
 
 Every comparison this copy has run, with the recordings and settings used.
 Useful for two things: finding a result you ran last week, and showing how a
-conclusion was arrived at. **Export as CSV…** takes the lot out.
+conclusion was arrived at. **Export as CSV…** takes the lot out. **Delete
+entry** removes one record, after asking; the recording and the speaker
+profile are not affected.
 
 The caveats recorded at the time are kept with each entry — so a result cannot
 later be read as cleaner than it was.
 
 ---
 
-## 10. Live and Translate
+## 10. Live
 
 **Live** transcribes an incoming stream, or a microphone on this PC, as it
-arrives. Use a small model (`base.en` or `small.en`) so it keeps up. **Chunk length** trades latency
-against smoothness: shorter is more live but choppier. The transcript can be
-saved to a file as it goes.
+arrives.
+
+1. Under **Listen to**, choose **A stream** or **A microphone on this PC**.
+2. For a stream, type its **Stream URL**, or tick **Wait for an incoming
+   connection (this PC hosts the stream)**. **Test connection** checks it
+   before you start. For a microphone, see [A microphone](#a-microphone).
+3. Pick a **Model**. Use a small one (`base.en` or `small.en`) so it keeps
+   up. **Language** works as on the Transcribe page.
+4. **Chunk length (seconds)** trades delay against smoothness: shorter is more
+   live but choppier.
+5. To keep the text as it arrives, tick **Save to file** and **Choose…** where.
+6. Press **Start live transcription**, and **Stop** when you are done.
+
+Under the transcript, **Copy** and **Clear** do what they say, and **Open in
+its own window** puts the live transcript on a second screen; it keeps running
+there.
 
 **Show who is speaking** (in a copy that can separate speakers) labels the
 live transcript by speaker, a little behind the words. Telling one voice from
@@ -788,7 +832,8 @@ another takes more than a few seconds of each, so:
 ### A microphone
 
 Under **Listen to**, choose **A microphone on this PC**, pick it from the list
-(**Refresh** looks again after you plug one in), and press **Start**.
+(**Refresh** looks again after you plug one in), and press **Start live
+transcription**.
 
 - **Everything it hears is kept.** A microphone's audio exists nowhere else, so
   the whole recording is saved as a WAV file in **Keep recordings in** (your
@@ -825,57 +870,77 @@ transcription itself still happens here. On a machine that is meant to stay
 isolated, use a microphone or nothing on this page; a microphone uses no
 network.
 
-### Translate
+---
 
-**Translate** translates pasted text, and can pull text out of an image or PDF
-first (**Extract from image/PDF…**) when the build includes OCR. The result can
-be saved as a Word document. It is entirely local.
+## 11. Translating documents, emails and chats
 
-**Documents in more than one language.** Each paragraph is looked at on its
-own. Foreign paragraphs are translated; English, names, addresses and numbers
-are left exactly as written and cost no time. Leave **From** on automatic
-detection for a document that mixes English with one other language. Choose
-a language under **From** when one script is used by several languages (Farsi
-rather than Arabic, say); it decides for every paragraph in that script.
+**Translate** turns foreign-language text into English: pasted text,
+documents, exported emails and chats, and forensic reports from Cellebrite and
+AXIOM. It works entirely on this machine, with the language packs inside the
+bundle: nothing is uploaded, and no online translation service is involved.
 
-**Scanned pages.** On automatic detection, each scanned page's script is
-recognised before it is read. On a page that is mostly English, lines English
-reading could not make out are tried in the other scripts this copy can read.
-If a scanned page still comes out as nonsense, choose its language under
-**From** and extract it again.
+It is for **triage**: finding what is in a foreign language, roughly what it
+says, and what needs a qualified linguist. It is not a certified translation —
+see [section 13](#13-what-the-results-do-and-do-not-mean).
 
-**Exported emails.** When a PDF holds emails (an Outlook or eDiscovery export),
-the result is laid out one email at a time:
+### Choosing the language
 
-- Each email's From, Sent, To and Cc lines are kept exactly as written.
-- Its Subject is translated, with the original underneath.
-- Banners, running headers and page numbers that repeat on every page are left
-  out, so they no longer interrupt the text. What was left out is listed at
-  the end, so nothing disappears unseen.
+**From** lists the languages this copy has a pack for. **To** is always
+English.
 
-**Keep the original under each translated paragraph** puts the original
-under each translated paragraph, for checking the translation.
+- **Auto-detect language** is the right choice for most work, including
+  documents that mix English with another language.
+- Choose a language when one script is used by several languages (Farsi
+  rather than Arabic, say). It decides for every paragraph in that script;
+  paragraphs in other languages are still detected.
+- **English (OCR only, no translation)** pulls the text out of an English scan
+  or image without translating anything.
 
-**How long it takes.** Machine translation is slow on an ordinary computer: a
-page of dense Chinese or Arabic can take a minute or more. The status line
-counts paragraphs and, after a few seconds, estimates the time left. Cancel
-stops it at the next paragraph.
+### One document, to read and check
 
-**Forensic reports and chats: side by side.** Under **Files**, **Write each
-PDF as** offers two products. **Side by side** (the default) suits Cellebrite
-and AXIOM reports, chat exports and anything else where a passage has to be
-found again. It does not depend on which tool made the PDF. It finds each
-table cell, message and paragraph by where it sits on the page, so a
-timestamp, a sender and a message body are kept apart.
+1. Paste the text into **Paste the text to translate**. For an image or PDF,
+   use **Extract from image/PDF…**, or drop the file on the box. The text it
+   reads appears in the box. Correct anything misread before going on.
+2. Press **Translate**. The English appears under **Result**.
+3. **Copy** it, or **Save as Word…**.
 
-- `<name>.en.pdf`: a first page saying what the file was (name and SHA-256),
-  which languages were found on which pages, what could not be translated,
-  and which versions of WHISPERS, Argos and the language packs made the
-  translation. Then each original page that has foreign-language text,
-  unchanged on the left, with its foreign passages highlighted and numbered;
-  the English for each number is on the right, level with it where there is
-  room. Passages in red are in a language this copy has no pack for. Pages
-  with no foreign-language text are left out, and listed on the first page.
+Tick **Keep the original under each translated paragraph** to have each
+original paragraph under its translation, for checking.
+
+### A forensic report, or many files
+
+1. Under **Files**, press **Add files…**, or drop the files on the card.
+2. Under **Write each PDF as**, choose **Side by side** (the default) or
+   **Reading copy** (both are described below).
+3. Press **Translate files**. If files it would write already exist, it asks
+   first: **Yes** replaces them, **No** skips those files, **Cancel** stops.
+
+When a side-by-side batch finishes, **Result** lists what each PDF held: how
+many pages have foreign-language text, and how many passages in which
+language. That is the quickest way to see which files need a linguist. Any
+file that was skipped is listed there too, with the reason.
+
+### Side by side: forensic reports and chats
+
+Side by side suits Cellebrite and AXIOM reports, chat exports and anything
+else where a passage has to be found again. It does not depend on which tool
+made the PDF. It finds each table cell, message and paragraph by where it sits
+on the page, so a timestamp, a sender and a message body are kept apart.
+
+Each PDF gets these files beside it:
+
+- `<name>.en.pdf`, which opens with a page saying:
+  - what the file was (its name and SHA-256);
+  - which languages were found, on which pages;
+  - what could not be translated;
+  - which versions of WHISPERS, Argos and the language packs made the
+    translation.
+
+  Then comes each original page that has foreign-language text, unchanged on
+  the left, with its foreign passages highlighted and numbered. The English
+  for each number is on the right, level with it where there is room.
+  Passages in red are in a language this copy has no pack for. Pages with no
+  foreign-language text are left out, and listed on the first page.
 - `<name>.en.docx`: the same passages as a table (page, number, language,
   original, English), for a linguist to work in.
 - `<name>.en.txt`: the same as plain text, for searching.
@@ -884,8 +949,10 @@ timestamp, a sender and a message body are kept apart.
 The PDF draws the English in a standard font, so a word the translation left
 in the original script shows as `[?]`; the Word copy shows every character.
 
-**Reading copy** writes the translation as continuous text instead, one email
-at a time, which is easier to read through. Each PDF or image gets:
+### Reading copy: emails and letters
+
+**Reading copy** writes the translation as continuous text, which is easier to
+read through. Each PDF or image gets:
 
 - `<name>.ocr.txt`: the extracted text, exactly as it came out;
 - `<name>.en.txt`: the translation;
@@ -893,16 +960,42 @@ at a time, which is easier to read through. Each PDF or image gets:
 
 Images are always written as a reading copy.
 
-When a batch finishes, **Result** lists what each PDF held: how many pages
-have foreign-language text, and how many passages in which language. That is
-the quickest way to see which files need a linguist.
+When a PDF holds emails (an Outlook or eDiscovery export), the reading copy is
+laid out one email at a time:
 
-Every translation says it is a machine translation. Have anything that matters
-checked by a linguist.
+- Each email's From, Sent, To and Cc lines are kept exactly as written.
+- Its Subject is translated, with the original underneath.
+- Banners, running headers and page numbers that repeat on every page are left
+  out, so they no longer interrupt the text. What was left out is listed at
+  the end, so nothing disappears unseen.
+
+### What it leaves alone
+
+Each paragraph or passage is looked at on its own. Foreign ones are
+translated. English, names, addresses and numbers are left exactly as written,
+and cost no time. A passage in a language this copy has no pack for is left as
+it is and marked "not translated: no language pack". Those passages need a
+linguist anyway.
+
+### Scanned pages
+
+On **Auto-detect language**, each scanned page's script is recognised before
+it is read. On a page that is mostly English, lines that English reading could
+not make out are tried in the other scripts this copy can read. If a scanned
+page still comes out as nonsense, choose its language under **From** and
+extract it again.
+
+### How long it takes
+
+Machine translation is slow on an ordinary computer: a page of dense Chinese
+or Arabic can take a minute or more. The status line counts passages and,
+after a few seconds, estimates the time left. A passage that repeats (a chat's
+"[Picture]", a system message) is translated once. **Cancel** stops at the next
+passage.
 
 ---
 
-## 11. When something goes wrong
+## 12. When something goes wrong
 
 **Start with System status.** It names what this copy can and cannot do, and
 rules out half the possibilities in one look.
@@ -915,6 +1008,9 @@ rules out half the possibilities in one look.
 | A model is not in this build | **System status** lists the ones that are. Pick one of those. |
 | It looks like it has frozen | Look for a dialog waiting for an answer — including on your other monitor. |
 | Odd failures, files that will not open | Run `WHISPERS.exe --verify`. A bundle damaged in transit fails differently every run. |
+| A scanned page translates as nonsense | Choose its language under **From** on the Translate page and run it again. |
+| Passages marked "no language pack" | This copy cannot translate that language. The passages are marked for a linguist; a build with that pack can translate them. |
+| Translation is taking hours | Expected for dense Chinese or Arabic on an ordinary computer. The status line estimates the time left. English is never sent for translation, so a long English report with a few foreign passages is quick. |
 
 The **Status** tab holds the technical detail for anything that went wrong. It
 is the right thing to copy when reporting a problem.
@@ -925,7 +1021,7 @@ not stuck.
 
 ---
 
-## 12. What the results do and do not mean
+## 13. What the results do and do not mean
 
 This section is the most important one in this guide.
 
@@ -953,6 +1049,10 @@ In practice:
   built from one short, poor sample will produce confident-looking numbers
   that mean very little. Quality and quantity of reference speech is the main
   thing under your control.
+- **A machine translation is for triage, not a translation of record.** Use it
+  to find what is in a foreign language and what needs attention. Have
+  anything you will quote, rely on or file translated by a qualified,
+  court-certified linguist. Every translation WHISPERS writes says so.
 - **The transcript is a draft until you have checked it.** The tool is good,
   and on bad audio it still guesses. Anything you are going to rely on — a
   quote, a name, a number, a time — should be listened to before it leaves
