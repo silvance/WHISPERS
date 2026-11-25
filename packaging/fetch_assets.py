@@ -631,7 +631,7 @@ def fetch_alignment() -> None:
 # Argos Translate source languages to bundle (each translates -> English). The
 # intel-leaning set; all are present in the Argos index (Pashto has no Argos pack).
 # Override on the command line / via the workflow input.
-ARGOS_DEFAULT_LANGS = ["ar", "ru", "zh", "fa", "uk", "he", "ko"]
+ARGOS_DEFAULT_LANGS = ["ar", "ru", "zh", "zt", "fa", "uk", "he", "ko"]
 
 
 def fetch_argos(codes: List[str]) -> None:
@@ -707,7 +707,7 @@ def fetch_argos(codes: List[str]) -> None:
 # for CPU OCR. We always add eng (often present in mixed docs) and osd (orientation
 # + script detection). The intel-leaning default mirrors the Argos set.
 TESSDATA_BASE_URL = "https://github.com/tesseract-ocr/tessdata_fast/raw/main"
-OCR_DEFAULT_LANGS = ["ar", "ru", "zh", "fa", "uk", "he", "ko"]
+OCR_DEFAULT_LANGS = ["ar", "ru", "zh", "zt", "fa", "uk", "he", "ko"]
 
 # Shared libraries we must NOT relocate when bundling a Linux Tesseract: the C
 # runtime and dynamic loader belong to the target system, not the build runner.

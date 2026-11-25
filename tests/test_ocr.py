@@ -59,7 +59,10 @@ def test_ensure_tessdata_prefix_sets_unquoted_path(tmp_path, monkeypatch):
     tessdata = tmp_path / "tesseract" / "tessdata"
     tessdata.mkdir(parents=True)
     monkeypatch.setattr(ocr, "bundled_tessdata_dir", lambda: tessdata)
-    monkeypatch.delenv("TESSDATA_PREFIX", raising=False)
+    # Set first, so that what the call under test sets is undone afterwards
+    # and does not point later tests' Tesseract at this empty folder.
+    monkeypatch.setenv("TESSDATA_PREFIX", "set by the test")
+    monkeypatch.delenv("TESSDATA_PREFIX")
     ocr._ensure_tessdata_prefix()
     assert os.environ["TESSDATA_PREFIX"] == str(tessdata)
     assert '"' not in os.environ["TESSDATA_PREFIX"]
@@ -195,3 +198,76 @@ def test_a_page_mostly_in_another_script_is_read_in_it(tesseract):
     fake = tesseract(_Tesseract(script="Arabic", chinese=False))
     assert ocr._ocr_image(_Image(), None) == "text read with ara+eng"
     assert fake.calls[-1] == ("string", "page", "ara+eng")
+
+
+# -- Simplified or Traditional Chinese -----------------------------------------
+
+
+def test_traditional_chinese_has_its_own_language_data():
+    assert tesseract_lang("zt") == "chi_tra"
+
+
+BOTH = ("eng", "chi_sim", "chi_tra", "osd")
+
+
+def test_chinese_left_to_be_detected_is_read_with_simplified_data(tesseract):
+    """Each kind of Chinese data reads the other's print; nothing measured
+    tells the two apart reliably, so detection never picks Traditional."""
+    fake = tesseract(_Tesseract(script="Han", chinese=False), installed=BOTH)
+    assert ocr._ocr_image(_Image(), None) == "text read with chi_sim+eng"
+    assert not any("chi_tra" in lang for _, _, lang in fake.calls)
+    # Chosen under From, Traditional print is read with its own data.
+    assert ocr._ocr_image(_Image(), "chi_tra") == "text read with chi_tra+eng"
+
+
+def test_unread_lines_are_tried_in_one_language_for_each_script(tesseract):
+    fake = tesseract(
+        _Tesseract(), installed=("eng", "ara", "fas", "chi_sim", "chi_tra", "osd")
+    )
+    ocr._ocr_image(_Image(), None)
+    tried = [lang for _, name, lang in fake.calls if name == "page-crop"]
+    assert tried == ["ara", "chi_sim"]
+
+
+def test_lines_are_not_tried_in_another_language_of_the_same_script(tesseract):
+    """Arabic data read the page; Farsi data would read the same lines no better."""
+    fake = tesseract(
+        _Tesseract(script="Arabic", chinese=True),
+        installed=("eng", "ara", "fas", "chi_sim", "osd"),
+    )
+    ocr._ocr_image(_Image(), None)
+    tried = [lang for _, name, lang in fake.calls if name == "page-crop"]
+    assert tried == ["chi_sim"]
+
+
+@pytest.mark.skipif(not ocr_available(), reason="Tesseract not installed")
+def test_a_clean_page_is_still_read_after_it_is_made_grey():
+    """Print is a sliver of a clean page's pixels: stretching the contrast
+    with the ends clipped took it for an outlier, and nothing was read."""
+    from PIL import Image, ImageDraw, ImageFont
+
+    page = Image.new("RGB", (2400, 1600), "white")
+    font = ImageFont.load_default(size=48)
+    ImageDraw.Draw(page).text(
+        (200, 200), "Meeting notes for the section", "black", font
+    )
+    assert "Meeting notes" in ocr._ocr_image(page, "eng")
+    grey = ocr._for_reading(page)
+    assert grey.mode == "L" and grey.getextrema() == (0, 255)
+
+
+def test_paragraphs_read_with_little_confidence_can_be_left_out(tesseract):
+    class Photo(_Tesseract):
+        def image_to_data(self, image, lang, output_type=None):
+            good = _data([(92.0, "会议 定于")])
+            junk = _data([(20.0, "ae SS")])
+            for key in good:
+                good[key] += junk[key]
+            good["par_num"][-2:] = [2, 2]
+            return good
+
+    tesseract(Photo(script="Han", chinese=False))
+    _, everything = ocr.ocr_paragraphs(_Image(), "chi_sim")
+    _, confident = ocr.ocr_paragraphs(_Image(), "chi_sim", min_confidence=45.0)
+    assert [text for text, _ in everything] == ["会议定于", "ae SS"]
+    assert [text for text, _ in confident] == ["会议定于"]

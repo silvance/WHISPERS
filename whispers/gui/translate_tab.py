@@ -97,6 +97,7 @@ class TranslateTab:
         self._extracted: Tuple[str, List[str]] = ("", [])
         self.keep_original_var = tk.BooleanVar(value=False)
         self.pdf_output_var = tk.StringVar(value=SIDE_BY_SIDE)
+        self.read_pictures_var = tk.BooleanVar(value=False)
         self._build()
 
     # -- UI construction ---------------------------------------------------
@@ -279,6 +280,24 @@ class TranslateTab:
                 justify="left",
                 style=Style.META,
             ).pack(anchor="w")
+            ttk.Checkbutton(
+                batch_frame,
+                text="Side by side: also read the text in pictures (slower)",
+                variable=self.read_pictures_var,
+                style=Style.CHECK,
+            ).pack(anchor="w", pady=(SPACE_SM, 0))
+            ttk.Label(
+                batch_frame,
+                text=(
+                    "A report page can hold pictures with text in them: a "
+                    "screenshot of a chat, a photographed letter. They are always "
+                    "counted on the first page of the result. Ticked, they are "
+                    "read too, which adds a few seconds for each picture."
+                ),
+                wraplength=620,
+                justify="left",
+                style=Style.META,
+            ).pack(anchor="w")
         # Drop files onto the batch box to add them to the queue.
         register_drop(self.root, self._dnd_ok, batch_frame, self._on_drop_files)
 
@@ -444,6 +463,7 @@ class TranslateTab:
         pages = read_pdf(
             src,
             lang=self._ocr_lang_code(),
+            pictures=bool(self.read_pictures_var.get()),
             progress=self._set_translate_status,
             cancelled=self._cancel_event.is_set,
         )
@@ -563,6 +583,7 @@ class TranslateTab:
         return {
             "keep_original": bool(self.keep_original_var.get()),
             "pdf_output": self.pdf_output_var.get(),
+            "read_pictures": bool(self.read_pictures_var.get()),
         }
 
     def apply_settings(self, data: Dict[str, object]) -> None:
@@ -570,6 +591,7 @@ class TranslateTab:
         output = data.get("pdf_output")
         if output in (SIDE_BY_SIDE, READING_COPY):
             self.pdf_output_var.set(str(output))
+        self.read_pictures_var.set(bool(data.get("read_pictures", False)))
 
     def _writes_side_by_side(self, src: Path) -> bool:
         return (

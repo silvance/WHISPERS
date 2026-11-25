@@ -508,6 +508,17 @@ recording containing that person speaking for more than three seconds.
       right. `<name>.en.docx` opens in Word as a table of the same passages,
       Arabic right to left. Result lists what each PDF held.
 - [ ] The PDF output choice is remembered after closing and reopening WHISPERS.
+- [ ] Side by side, page geometry: batch a report with landscape pages (wide
+      tables). Each page comes out the right way up, and every highlight sits
+      on the text it marks.
+- [ ] Side by side, short messages: batch a chat export in a Latin-letter
+      language (Spanish, French). Short messages are marked, and English
+      messages, names and column labels are not.
+- [ ] Side by side, pictures: batch a report with screenshots in it. The first
+      page and Result say how many pictures were not read. With **also read
+      the text in pictures** ticked, text in a clear screenshot is marked on
+      the picture and translated.
+- [ ] The first page of a side-by-side PDF says what it cannot see.
 
 ## Dialogs
 

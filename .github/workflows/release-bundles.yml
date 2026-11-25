@@ -47,10 +47,10 @@ on:
         default: "titanet-large"
       translate_langs:
         description: "Argos text-translation packs to bundle (<code>->en, comma-separated; empty to skip translation)"
-        default: "ar,ru,zh,fa,uk,he,ko"
+        default: "ar,ru,zh,zt,fa,uk,he,ko"
       ocr_langs:
         description: "Tesseract OCR language packs to bundle (image/PDF -> text; comma-separated; empty to skip OCR)"
-        default: "ar,ru,zh,fa,uk,he,ko"
+        default: "ar,ru,zh,zt,fa,uk,he,ko"
       release_tag:
         description: "Publish a downloadable GitHub Release with this tag (e.g. v1.0.0). Leave empty to only build artifacts. Keep the bundle under ~2 GB per OS (a release asset is capped at 2 GB) - e.g. models=base.en, diarizer=sherpa, empty translate/ocr."
         default: ""
@@ -102,9 +102,9 @@ jobs:
       # channel, noise and duration - see packaging/fetch_assets.py.
       EMBEDDING: ${{ github.event.inputs.embedding || 'titanet-large' }}
       # Argos text-translation packs (<code>->en). Empty string skips translation.
-      TRANSLATE_LANGS: ${{ github.event.inputs.translate_langs || 'ar,ru,zh,fa,uk,he,ko' }}
+      TRANSLATE_LANGS: ${{ github.event.inputs.translate_langs || 'ar,ru,zh,zt,fa,uk,he,ko' }}
       # Tesseract OCR language packs (image/PDF -> text). Empty string skips OCR.
-      OCR_LANGS: ${{ github.event.inputs.ocr_langs || 'ar,ru,zh,fa,uk,he,ko' }}
+      OCR_LANGS: ${{ github.event.inputs.ocr_langs || 'ar,ru,zh,zt,fa,uk,he,ko' }}
     steps:
       - name: Resolve release tag
         id: rel

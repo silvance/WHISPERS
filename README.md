@@ -540,11 +540,29 @@ on the right. A first page records:
 - what was left untranslated;
 - the WHISPERS, Argos and language-pack versions that made the translation.
 
-Passages are found by where they sit on the page (columns, wrapped cells,
-paragraphs), not by parsing a particular tool's layout. Cellebrite and AXIOM
+Passages are found by where they sit on the page **as it is shown** (columns,
+wrapped cells, paragraphs), not by parsing a particular tool's layout. That
+holds for a landscape page stored as a turned portrait one, a table set
+sideways, and a page whose coordinates do not start at its corner. Cellebrite and AXIOM
 reports, chat exports and emails therefore all work the same way. Scanned
 pages are read with OCR and marked from its word boxes. A Word table of the
-same passages (`<name>.en.docx`) is written alongside. Every product says it is
+same passages (`<name>.en.docx`) is written alongside.
+
+What triage could otherwise miss is either caught or stated:
+
+- **Short lines in Latin-script languages** are judged against the languages
+  the whole document shows, with the detector weighing only English and those.
+- **A name or phrase in another script inside an English sentence** is
+  translated in place, in square brackets.
+- **Scripts with no pack** (Georgian, Ethiopic, Bengali and others) are named
+  and marked for a linguist.
+- **Pictures on a page that has text** are always counted, and read with OCR on
+  request.
+- **Traditional Chinese** has its own pack (`zt`) and OCR data (`chi_tra`), both
+  in the default build.
+
+The first page of every product states what it cannot see: short Latin-script
+messages can pass as English, and romanised text is not recognised. Every product says it is
 an unreviewed machine translation for triage, not a certified translation.
 
 **Images and PDFs (OCR).** With OCR bundled, the batch picker also accepts images
@@ -625,10 +643,10 @@ Release: only someone signed in with repo access can download an artifact, and i
 retained for 14 days by default (raise `retention-days` in the workflow if you need
 longer). The **`translate_langs`** input controls which offline text-translation
 packs (each `<code>→en`) are bundled for the Translate tab (default
-`ar,ru,zh,fa,uk,he,ko`; empty to skip translation). Packs and their sentence
+`ar,ru,zh,zt,fa,uk,he,ko`; empty to skip translation). Packs and their sentence
 splitter are baked in, so translation also runs with no network. The
 **`ocr_langs`** input bundles Tesseract OCR language data (and the Tesseract
-binary) for translating images/PDFs (default `ar,ru,zh,fa,uk,he,ko`; empty to
+binary) for translating images/PDFs (default `ar,ru,zh,zt,fa,uk,he,ko`; empty to
 skip OCR), so OCR also runs air-gapped.
 
 **Publishing a downloadable release.** To put a build on the repo's **Releases**

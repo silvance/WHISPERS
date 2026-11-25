@@ -239,7 +239,7 @@ def test_long_text_in_another_latin_language_is_translated_or_named():
 
 def test_the_language_chosen_under_from_wins_within_its_script():
     persian = "این یک متن آزمایشی است"
-    detect = lambda _: [("ar", 0.8), ("fa", 0.2)]  # noqa: E731
+    detect = lambda _text, _among=None: [("ar", 0.8), ("fa", 0.2)]  # noqa: E731
     assert choose_language(
         persian, forced="fa", installed=INSTALLED, detect=detect
     ) == ("fa", "")
@@ -256,3 +256,109 @@ def test_a_script_with_no_pack_installed_is_named():
     assert choose_language(
         "안녕하세요 세계", forced=None, installed=INSTALLED, detect=_never
     ) == (None, "ko")
+
+
+# -- Text that used to be passed over ------------------------------------------
+
+
+def test_text_in_a_script_with_no_language_here_is_named_by_its_script():
+    from whispers.documents import LANGUAGE_NAMES
+
+    for text, script in (("ሰላም ለዓለም", "ethiopic"), ("სალამი მსოფლიო", "georgian")):
+        assert choose_language(
+            text, forced=None, installed=INSTALLED, detect=_never
+        ) == (None, script)
+        assert LANGUAGE_NAMES[script].endswith(("script", ")"))
+    # Letters of no script known here are still not passed over as nothing.
+    assert choose_language(
+        "ᚠᚢᚦᚨᚱᚲ ᚷᚹᚺᚾ", forced=None, installed=INSTALLED, detect=_never
+    ) == (None, "other")
+
+
+def test_full_width_latin_letters_are_latin():
+    assert char_script("Ａ") == "latin"
+    assert dominant_script("ＡＢＣ　ｏｆｆｉｃｅ") == "latin"
+
+
+def test_a_name_in_another_script_inside_english_is_found():
+    from whispers.documents import foreign_runs
+
+    text = "Transfer the money to 王建国 tomorrow please"
+    ((start, end, script),) = foreign_runs(text)
+    assert (text[start:end], script) == ("王建国", "han")
+    # A run carries on over spaces and punctuation, and stops at a Latin letter.
+    text = "see 王建国、李娜 (上海) and Ахмед Иванов"
+    assert [(text[s:e], script) for s, e, script in foreign_runs(text)] == [
+        ("王建国、李娜 (上海", "han"),
+        ("Ахмед Иванов", "cyrillic"),
+    ]
+    # Kana marks a run as Japanese; one Greek letter is a symbol, not a run.
+    assert [script for _, _, script in foreign_runs("at 東京タワー now")] == ["kana"]
+    assert foreign_runs("the angle θ and Δt are small") == []
+    assert foreign_runs("plain English, 123") == []
+
+
+def _spanish_or_english(text, among=None):
+    """A stand-in detector: lines with a Spanish word in them are Spanish."""
+    words = {"nos", "vemos", "mañana", "dónde", "estás", "trae", "dinero", "el"}
+    spanish = sum(w.strip(".,¿?") in words for w in text.lower().split())
+    if spanish:
+        return [("es", 0.99)]
+    # Asked an open question about a few words, a detector guesses.
+    return [("en", 0.99)] if among or len(text) > 40 else [("af", 0.99)]
+
+
+def test_a_documents_latin_languages_are_found_from_its_long_passages():
+    from whispers.documents import latin_languages
+
+    long_spanish = (
+        "Nos vemos mañana a las nueve en el lugar de siempre, trae el dinero."
+    )
+    assert latin_languages(
+        ["OK, see you there.", long_spanish], detect=_spanish_or_english
+    ) == {"es"}
+    assert latin_languages(["OK, see you there."], detect=_spanish_or_english) == set()
+    # The language chosen under From counts as being there; Chinese is not
+    # a Latin-script language, so choosing it adds nothing here.
+    assert latin_languages([], forced="es") == {"es"}
+    assert latin_languages([], forced="zh") == set()
+
+
+def test_a_few_accented_lines_in_a_long_english_chat_are_enough():
+    from whispers.documents import latin_languages
+
+    chat = ["see you at nine", "bring the documents"] * 20
+    chat += ["dónde estás", "nos vemos mañana", "mañana trae el dinero"]
+    assert latin_languages(chat, detect=_spanish_or_english) == {"es"}
+
+
+def test_short_lines_are_judged_against_what_the_document_shows():
+    def choose(text, present):
+        return choose_language(
+            text,
+            forced=None,
+            installed=INSTALLED,
+            detect=_spanish_or_english,
+            present=present,
+        )
+
+    # With nothing known about the document, a short line is left alone.
+    assert choose("nos vemos mañana", None) == (None, "")
+    # Known to hold Spanish: the line is Spanish (no pack here, so it is named).
+    assert choose("nos vemos mañana", {"es"}) == (None, "es")
+    assert choose_language(
+        "nos vemos mañana",
+        forced=None,
+        installed=INSTALLED | {"es"},
+        detect=_spanish_or_english,
+        present={"es"},
+    ) == ("es", "")
+    # English lines in the same document stay English.
+    assert choose("see you there", {"es"}) == (None, "")
+
+
+def test_one_word_names_and_labels_are_not_put_to_the_detector():
+    for text in ("ok", "Timestamp", "Maria Lopez", "Start Time", "10:15 AM"):
+        assert choose_language(
+            text, forced=None, installed=INSTALLED, detect=_never, present={"es"}
+        ) == (None, "")

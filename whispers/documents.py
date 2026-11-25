@@ -221,11 +221,33 @@ _RANGES: Tuple[Tuple[str, int, int], ...] = (
     ("greek", 0x0370, 0x03FF),
     ("devanagari", 0x0900, 0x097F),
     ("thai", 0x0E00, 0x0E7F),
+    # Scripts this copy has no language for. They are named so that text in
+    # them is reported as needing a linguist, never passed over as nothing.
+    ("armenian", 0x0530, 0x058F),
+    ("syriac", 0x0700, 0x074F),
+    ("thaana", 0x0780, 0x07BF),
+    ("bengali", 0x0980, 0x09FF),
+    ("gurmukhi", 0x0A00, 0x0A7F),
+    ("gujarati", 0x0A80, 0x0AFF),
+    ("tamil", 0x0B80, 0x0BFF),
+    ("telugu", 0x0C00, 0x0C7F),
+    ("kannada", 0x0C80, 0x0CFF),
+    ("malayalam", 0x0D00, 0x0D7F),
+    ("sinhala", 0x0D80, 0x0DFF),
+    ("lao", 0x0E80, 0x0EFF),
+    ("tibetan", 0x0F00, 0x0FFF),
+    ("myanmar", 0x1000, 0x109F),
+    ("georgian", 0x10A0, 0x10FF),
+    ("ethiopic", 0x1200, 0x139F),
+    ("khmer", 0x1780, 0x17FF),
+    ("mongolian", 0x1800, 0x18AF),
 )
 # Scripts written without spaces between words: one character carries about
 # as much as a short word, so it is weighed as several letters.
-_DENSE = {"han", "kana", "hangul", "thai"}
+_DENSE = {"han", "kana", "hangul", "thai", "lao", "khmer", "myanmar"}
 _DENSE_WEIGHT = 3
+# Of those, the ones whose lines join without a space (Korean has spaces).
+_NO_SPACES = {"thai", "lao", "khmer", "myanmar"}
 # The languages each script is used for, most likely first, as Argos codes.
 SCRIPT_LANGUAGES: Dict[str, Tuple[str, ...]] = {
     "han": ("zh", "zt"),
@@ -239,7 +261,7 @@ SCRIPT_LANGUAGES: Dict[str, Tuple[str, ...]] = {
     "thai": ("th",),
 }
 # Scripts read right to left, for laying out a Word document.
-RIGHT_TO_LEFT = {"arabic", "hebrew"}
+RIGHT_TO_LEFT = {"arabic", "hebrew", "syriac", "thaana"}
 # Names for languages that may be found without a pack installed to name them.
 LANGUAGE_NAMES: Dict[str, str] = {
     "ar": "Arabic",
@@ -270,6 +292,47 @@ LANGUAGE_NAMES: Dict[str, str] = {
     "vi": "Vietnamese",
     "zh": "Chinese",
     "zt": "Chinese (Traditional)",
+    "af": "Afrikaans",
+    "bn": "Bengali",
+    "ca": "Catalan",
+    "cs": "Czech",
+    "cy": "Welsh",
+    "da": "Danish",
+    "et": "Estonian",
+    "fi": "Finnish",
+    "hr": "Croatian",
+    "hu": "Hungarian",
+    "lt": "Lithuanian",
+    "lv": "Latvian",
+    "mk": "Macedonian",
+    "ms": "Malay",
+    "no": "Norwegian",
+    "ro": "Romanian",
+    "sk": "Slovak",
+    "sl": "Slovenian",
+    "sq": "Albanian",
+    "sv": "Swedish",
+    "sw": "Swahili",
+    # Text in a script with no language to name: the script is named instead.
+    "armenian": "Armenian script",
+    "syriac": "Syriac script",
+    "thaana": "Thaana script (Dhivehi)",
+    "bengali": "Bengali script",
+    "gurmukhi": "Gurmukhi script (Punjabi)",
+    "gujarati": "Gujarati script",
+    "tamil": "Tamil script",
+    "telugu": "Telugu script",
+    "kannada": "Kannada script",
+    "malayalam": "Malayalam script",
+    "sinhala": "Sinhala script",
+    "lao": "Lao script",
+    "tibetan": "Tibetan script",
+    "myanmar": "Burmese script",
+    "georgian": "Georgian script",
+    "ethiopic": "Ethiopic script (Amharic, Tigrinya)",
+    "khmer": "Khmer script",
+    "mongolian": "Mongolian script",
+    "other": "A script not recognised",
 }
 
 
@@ -280,7 +343,10 @@ def char_script(ch: str) -> Optional[str]:
         if low <= code <= high:
             return name
     if ch.isalpha():
-        return "latin" if code < 0x0250 or 0x1E00 <= code <= 0x1EFF else "other"
+        if code < 0x0250 or 0x1E00 <= code <= 0x1EFF:
+            return "latin"
+        # Full-width and other extended Latin letters are still Latin.
+        return "latin" if "LATIN" in unicodedata.name(ch, "") else "other"
     return None
 
 
@@ -322,7 +388,7 @@ def _tight(last: str, first: str) -> bool:
     written without spaces between words; Korean is written with them.
     """
     scripts = {char_script(last), char_script(first)}
-    if scripts == {"thai"}:
+    if len(scripts) == 1 and scripts <= _NO_SPACES:
         return True
     wide = all(unicodedata.east_asian_width(ch) in "WF" for ch in (last, first))
     return wide and "hangul" not in scripts
@@ -479,12 +545,137 @@ def parse(text: str) -> List[Section]:
 
 # -- Which language to translate from -----------------------------------------
 
-Detector = Callable[[str], Sequence[Tuple[str, float]]]
-# A Latin-script paragraph is only taken for a foreign language when it is at
-# least this long and the detector is at least this sure: short lines (names,
-# codes, "OK") are where language detection guesses.
+# A detector gives the likely languages of a text, most likely first, each
+# with its probability. Given ``among``, it weighs only those languages
+# against one another.
+Detector = Callable[..., Sequence[Tuple[str, float]]]
+# A Latin-script paragraph is taken for a foreign language on its own
+# evidence only when it is at least this long and the detector is at least
+# this sure: short lines (names, codes, "OK") are where detection guesses.
 _LATIN_MIN_LETTERS = 40
 _LATIN_MIN_CONFIDENCE = 0.9
+# Short lines are judged together instead. A chat is mostly short messages:
+# taken one at a time they cannot be told from English, taken together they
+# can. This many letters of them are needed, and a language needs this share.
+_SHORT_TOGETHER_LETTERS = 200
+_SHORT_SHARE = 0.25
+
+
+def _latin_letters(text: str) -> int:
+    return sum(1 for ch in text if char_script(ch) == "latin")
+
+
+def _accented(text: str) -> bool:
+    """Whether ``text`` has a Latin letter English does not use (ñ, é, ş, đ)."""
+    return any(ord(ch) > 0x7F and char_script(ch) == "latin" for ch in text)
+
+
+def _latin_language(code: str) -> bool:
+    """Whether ``code`` is a language written in Latin letters, English aside."""
+    return code != "en" and not any(
+        code in languages for languages in SCRIPT_LANGUAGES.values()
+    )
+
+
+def _reads_as_text(text: str) -> bool:
+    """Whether a short Latin-script line is worth asking the detector about.
+
+    One word is not, unless it has a letter English does not use. Nor is a
+    line with every word capitalised: a name, or the label of a field.
+    """
+    words = re.findall(r"[^\W\d_]+", text)
+    if not words:
+        return False
+    if len(words) == 1:
+        return _accented(words[0])
+    return not all(word[:1].isupper() for word in words)
+
+
+def latin_languages(
+    texts: Iterable[str],
+    *,
+    forced: Optional[str] = None,
+    detect: Optional[Detector] = None,
+) -> Set[str]:
+    """The languages written in Latin letters, English aside, found in ``texts``.
+
+    What a document as a whole shows, for judging its short lines by (see
+    :func:`choose_language`). A language is taken to be there when:
+
+    * it was chosen under From;
+    * a long passage is plainly in it;
+    * the short lines, taken together, are in it to a fair share; or
+    * the short lines with letters English does not use, taken together,
+      are plainly in it (a few Spanish messages in a long English chat).
+    """
+    present: Set[str] = set()
+    if forced is not None and _latin_language(forced):
+        present.add(forced)
+    if detect is None:
+        return present
+
+    def plainly(text: str) -> Optional[str]:
+        guesses = list(detect(text))
+        if guesses and guesses[0][1] >= _LATIN_MIN_CONFIDENCE:
+            return guesses[0][0]
+        return None
+
+    short: List[str] = []
+    for text in dict.fromkeys(texts):
+        if dominant_script(text) != "latin":
+            continue
+        if _latin_letters(text) >= _LATIN_MIN_LETTERS:
+            code = plainly(text)
+            if code is not None:
+                present.add(code)
+        else:
+            short.append(text)
+    together = ". ".join(short)
+    if _latin_letters(together) >= _SHORT_TOGETHER_LETTERS:
+        present |= {code for code, share in detect(together) if share >= _SHORT_SHARE}
+    accented = ". ".join(text for text in short if _accented(text))
+    if _latin_letters(accented) >= _LATIN_MIN_LETTERS:
+        code = plainly(accented)
+        if code is not None:
+            present.add(code)
+    return {code for code in present if _latin_language(code)}
+
+
+def foreign_runs(text: str) -> List[Tuple[int, int, str]]:
+    """Runs of another script inside ``text``, each as (start, end, script).
+
+    For a passage that is mostly English but holds a name or a phrase in
+    another script ("Transfer the money to 王建国 tomorrow"). A run carries on
+    over spaces, digits and punctuation until a Latin letter or a third
+    script. One character of a script written without spaces is a word; one
+    letter of an alphabet (a Greek letter in a formula) is not a run.
+    """
+    runs: List[Tuple[int, int, str]] = []
+    start = end = letters = 0
+    script: Optional[str] = None
+
+    def close() -> None:
+        nonlocal script
+        if script is not None and letters >= (1 if script in _DENSE else 2):
+            runs.append((start, end, script))
+        script = None
+
+    for index, ch in enumerate(text):
+        name = char_script(ch)
+        if name is None:
+            continue
+        both_cjk = name in ("han", "kana") and script in ("han", "kana")
+        if name == "latin" or (script is not None and name != script and not both_cjk):
+            close()
+        if name == "latin":
+            continue
+        if script is None:
+            start, letters, script = index, 0, name
+        elif name == "kana":
+            script = "kana"  # Japanese writes with both; kana marks it.
+        end, letters = index + 1, letters + 1
+    close()
+    return runs
 
 
 def choose_language(
@@ -493,6 +684,7 @@ def choose_language(
     forced: Optional[str],
     installed: Set[str],
     detect: Optional[Detector] = None,
+    present: Optional[Set[str]] = None,
 ) -> Tuple[Optional[str], str]:
     """The language to translate ``text`` from, or None to leave it as it is.
 
@@ -503,31 +695,43 @@ def choose_language(
     The script decides first, because it is certain: Han characters are
     Chinese, Hangul Korean. Within a script used by several languages (Arabic
     script for Arabic, Farsi, Urdu, Pashto), the language chosen under From
-    wins, then the detector. Latin-script text is left alone unless a
-    Latin-script language was chosen, or it is long and plainly not English.
+    wins, then the detector. Text in a script this copy has no language for
+    is named by its script.
+
+    Latin-script text is taken for a foreign language when it is long and
+    plainly not English. A short line is judged against ``present``, the
+    Latin-script languages the document as a whole shows (see
+    :func:`latin_languages`): the detector weighs only English and those,
+    which it can do on a few words where an open question cannot be answered.
     """
     script = dominant_script(text)
-    if script is None or script == "other":
+    if script is None:
         return None, ""
     if script == "latin":
-        letters = sum(1 for ch in text if char_script(ch) == "latin")
-        if letters < _LATIN_MIN_LETTERS or detect is None:
+        if detect is None:
             return None, ""
-        guesses = list(detect(text))
-        if not guesses:
+        code: Optional[str] = None
+        if _latin_letters(text) >= _LATIN_MIN_LETTERS:
+            guesses = list(detect(text))
+            if guesses and guesses[0][1] >= _LATIN_MIN_CONFIDENCE:
+                code = guesses[0][0]
+        if code is None and present and _reads_as_text(text):
+            guesses = list(detect(text, sorted(present | {"en"})))
+            if guesses and guesses[0][1] >= _LATIN_MIN_CONFIDENCE:
+                code = guesses[0][0]
+        if code is None or code == "en":
             return None, ""
-        code, confidence = guesses[0]
-        if code == "en" or confidence < _LATIN_MIN_CONFIDENCE:
-            return None, ""
-        if forced is not None and forced in installed and code == forced:
-            return forced, ""
         return (code, "") if code in installed else (None, code)
     candidates = SCRIPT_LANGUAGES.get(script, ())
     if forced is not None and forced in candidates and forced in installed:
         return forced, ""
     available = [code for code in candidates if code in installed]
     if len(available) > 1 and detect is not None:
-        guessed = next((code for code, _ in detect(text) if code in available), None)
+        # Weighed against one another only: asked an open question, a
+        # detector takes Traditional Chinese for Korean.
+        guessed = next(
+            (code for code, _ in detect(text, available) if code in available), None
+        )
         if guessed is not None:
             return guessed, ""
     if available:

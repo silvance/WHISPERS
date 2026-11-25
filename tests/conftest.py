@@ -18,7 +18,7 @@ SPANISH = "El convoy salió de la base a las seis y llegó al río al mediodía.
 FRENCH = "Le convoi a quitté la base à six heures et il est arrivé à midi."
 
 
-def detect_test_languages(text):
+def detect_test_languages(text, among=None):
     """A stand-in for langdetect that knows the test sentences."""
     if "convoy" in text:
         return [("es", 0.99)]

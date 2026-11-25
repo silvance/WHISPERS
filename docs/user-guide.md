@@ -893,6 +893,15 @@ English.
 - Choose a language when one script is used by several languages (Farsi
   rather than Arabic, say). It decides for every paragraph in that script;
   paragraphs in other languages are still detected.
+- Choose a language written in Latin letters (Spanish, French, Indonesian)
+  when you know a document has it but little of it: a few short messages in a
+  long English chat. That tells the tool to look for it in the short lines
+  (see [What it can miss](#what-it-can-miss)).
+- Choose **Chinese (traditional)** for a scan printed in Traditional
+  characters (Taiwan, Hong Kong). Left on automatic, a Chinese scan is read
+  as Simplified, which reads Traditional print too, with a few more
+  mistakes. Typed text needs no choosing: each passage goes to the pack for
+  its own characters, where this copy has both.
 - **English (OCR only, no translation)** pulls the text out of an English scan
   or image without translating anything.
 
@@ -912,7 +921,10 @@ original paragraph under its translation, for checking.
 1. Under **Files**, press **Add files…**, or drop the files on the card.
 2. Under **Write each PDF as**, choose **Side by side** (the default) or
    **Reading copy** (both are described below).
-3. Press **Translate files**. If files it would write already exist, it asks
+3. If the reports hold pictures that may have text in them (screenshots of
+   chats, photographed documents), tick **Side by side: also read the text
+   in pictures (slower)**. See [Pictures](#pictures).
+4. Press **Translate files**. If files it would write already exist, it asks
    first: **Yes** replaces them, **No** skips those files, **Cancel** stops.
 
 When a side-by-side batch finishes, **Result** lists what each PDF held: how
@@ -973,9 +985,52 @@ laid out one email at a time:
 
 Each paragraph or passage is looked at on its own. Foreign ones are
 translated. English, names, addresses and numbers are left exactly as written,
-and cost no time. A passage in a language this copy has no pack for is left as
-it is and marked "not translated: no language pack". Those passages need a
-linguist anyway.
+and cost no time.
+
+A name or phrase in another script inside an English sentence is translated
+where it stands, in square brackets, and the rest of the sentence is not
+touched: "Transfer the money to [Wang Jianguo] tomorrow". The original is
+beside it in every product.
+
+A passage in a language this copy has no pack for is left as it is and marked
+"not translated: no language pack". That includes scripts the tool can name
+but not read, such as Georgian, Armenian, Ethiopic or Bengali. Those passages
+need a linguist anyway.
+
+### What it can miss
+
+Finding no foreign-language text does not show there is none. Every
+side-by-side product says so on its first page. Three things can pass
+unnoticed:
+
+- **Short messages in a language written in Latin letters.** A few words of
+  Spanish cannot be told from English on their own. The tool judges short
+  lines against the rest of the document: once a chat as a whole shows
+  Spanish, its short Spanish lines are caught too. On test chats it caught
+  about four in five, and flagged no English. One-word messages still slip
+  through, and so do a few foreign lines in a long English chat when they
+  have no accented letters. If you know the language is there, choose it
+  under **From**.
+- **A language typed in Latin letters instead of its own script.** Pinyin, or
+  Arabic in chat spelling, is not recognised at all. It reads as English to
+  the tool.
+- **Text in pictures**, unless you ask for them to be read (next).
+
+### Pictures
+
+A report page with text of its own can also hold pictures with text in them:
+a screenshot of a chat, a photographed letter. Their text is not part of the
+page's text.
+
+- Pictures big enough to hold text are **always counted**. The first page of
+  the side-by-side PDF says how many were not read and on which pages, and so
+  does **Result**.
+- With **Side by side: also read the text in pictures (slower)** ticked, each
+  is read with OCR, which adds a few seconds for each picture. What is found
+  is marked on the picture and translated like any other passage.
+
+OCR reads a clear screenshot well and a photograph of a crumpled page badly.
+A picture that matters is worth opening in the original.
 
 ### Scanned pages
 
@@ -1009,6 +1064,9 @@ rules out half the possibilities in one look.
 | It looks like it has frozen | Look for a dialog waiting for an answer — including on your other monitor. |
 | Odd failures, files that will not open | Run `WHISPERS.exe --verify`. A bundle damaged in transit fails differently every run. |
 | A scanned page translates as nonsense | Choose its language under **From** on the Translate page and run it again. |
+| A chat you know has Spanish (or another Latin-letter language) shows little or none | Choose that language under **From** and run it again. Short messages are only caught once the tool knows to look for the language. |
+| The first page says pictures were not read | Tick **Side by side: also read the text in pictures (slower)** and run it again, or open those pages in the original. |
+| The side-by-side page is sideways | The page is stored that way in the PDF. The passages are still marked where they are; turn the view in your PDF reader. |
 | Passages marked "no language pack" | This copy cannot translate that language. The passages are marked for a linguist; a build with that pack can translate them. |
 | Translation is taking hours | Expected for dense Chinese or Arabic on an ordinary computer. The status line estimates the time left. English is never sent for translation, so a long English report with a few foreign passages is quick. |
 

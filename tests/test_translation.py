@@ -178,3 +178,134 @@ def test_rendered_text_keeps_emails_apart_and_lists_what_was_left_out():
         "names, numbers)."
     )
     assert "<ar: مرحبا>\n    Arabic" not in document.render_text()
+
+
+def test_a_name_in_another_script_is_translated_where_it_stands():
+    document = _translate(
+        [Section(paragraphs=["Transfer the money to 王建国 tomorrow please"])]
+    )
+    (piece,) = document.sections[0].paragraphs
+    assert _Fake.calls == [("zh", "王建国")]
+    assert piece.text == "Transfer the money to [<zh: 王建国>] tomorrow please"
+    assert piece.language == "zh" and piece.original.startswith("Transfer the money")
+
+
+def test_a_run_with_no_pack_marks_the_paragraph_for_a_linguist():
+    document = _translate([Section(paragraphs=["Call 김민준 at the office today"])])
+    (piece,) = document.sections[0].paragraphs
+    assert _Fake.calls == []
+    assert piece.missing == "ko" and piece.text == piece.original
+
+
+_HAS_LANGDETECT = importlib.util.find_spec("langdetect") is not None
+
+SPANISH_CHAT = [
+    "nos vemos mañana",
+    "dónde estás",
+    "llego tarde perdón",
+    "te lo mando esta noche",
+    "en el mismo lugar",
+    "trae los documentos",
+    "no le digas a nadie",
+    "cuánto cuesta",
+    "te llamo luego",
+    "estoy en el trabajo",
+    "no puedo hablar",
+    "abre la puerta",
+    "tengo el dinero",
+    "mándame la dirección",
+    "cambiaron el plan",
+    "borra esto después",
+    "ya llegó el paquete",
+    "pago en efectivo",
+]
+ENGLISH_CHAT = [
+    "OK, see you there.",
+    "where are you",
+    "running late sorry",
+    "I'll send it tonight",
+    "same place as before",
+    "bring the documents",
+    "don't tell anyone",
+    "call you back",
+    "at work now",
+    "open the door",
+    "send me the address",
+    "they changed the plan",
+    "Timestamp",
+    "From",
+    "Status",
+    "Read",
+    "John Smith",
+    "Maria Lopez",
+]
+
+
+def _flagged(lines, forced=None):
+    document = translate_document(
+        [Section(paragraphs=list(lines))],
+        forced=forced,
+        installed={"zh", "ar"},
+        translator_for=_Fake,
+    )
+    return {
+        piece.original
+        for piece in document.sections[0].paragraphs
+        if piece.translated or piece.missing
+    }
+
+
+@pytest.mark.skipif(not _HAS_LANGDETECT, reason="langdetect not installed")
+def test_short_spanish_messages_in_a_chat_are_caught_and_english_is_not():
+    """Measured with the real detector: a chat of short messages, none long
+    enough to be told from English on its own."""
+    flagged = _flagged(ENGLISH_CHAT + SPANISH_CHAT)
+    caught = flagged & set(SPANISH_CHAT)
+    assert len(caught) >= 14  # most of the 18; one-word and unaccented lines slip
+    assert flagged <= set(SPANISH_CHAT)  # no English line, name or label
+
+
+@pytest.mark.skipif(not _HAS_LANGDETECT, reason="langdetect not installed")
+def test_an_english_chat_is_not_flagged_even_with_a_language_chosen():
+    assert _flagged(ENGLISH_CHAT * 3) == set()
+    assert _flagged(ENGLISH_CHAT * 3, forced="es") == set()
+
+
+@pytest.mark.skipif(not _HAS_LANGDETECT, reason="langdetect not installed")
+def test_the_detector_can_weigh_a_few_languages_against_one_another():
+    from whispers.translation import detect_language_scores
+
+    (best, _), *_ = detect_language_scores("te llamo luego", ["en", "es"])
+    assert best == "es"
+    assert {
+        code for code, _ in detect_language_scores("te llamo luego", ["en", "es"])
+    } <= {
+        "en",
+        "es",
+    }
+    # Traditional Chinese has a pack of its own. Asked an open question the
+    # detector takes it for Korean, so the two are weighed against each other.
+    chinese = ["zh", "zt"]
+    traditional = "會議定於下週三舉行，請各部門負責人準時出席。"
+    simplified = "会议定于下周三举行，请各部门负责人准时出席。"
+    assert detect_language_scores(traditional, chinese)[0][0] == "zt"
+    assert detect_language_scores(simplified, chinese)[0][0] == "zh"
+
+
+@pytest.mark.skipif(not _HAS_LANGDETECT, reason="langdetect not installed")
+def test_traditional_chinese_goes_to_its_own_pack_when_this_copy_has_one():
+    from whispers.documents import choose_language
+    from whispers.translation import detect_language_scores
+
+    traditional = "會議定於下週三舉行，請各部門負責人準時出席。"
+    simplified = "会议定于下周三举行，请各部门负责人准时出席。"
+
+    def choose(text, installed):
+        return choose_language(
+            text, forced=None, installed=installed, detect=detect_language_scores
+        )
+
+    assert choose(traditional, {"zh", "zt"}) == ("zt", "")
+    assert choose(simplified, {"zh", "zt"}) == ("zh", "")
+    # Without the Traditional pack, all Chinese goes to the one there is.
+    assert choose(traditional, {"zh"}) == ("zh", "")

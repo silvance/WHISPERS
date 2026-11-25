@@ -197,11 +197,12 @@ def side_by_side_docx(triage: "Triage", path: PathLike) -> Path:
     """
     from docx.shared import Pt
 
-    from .side_by_side import NOTICE, header_lines
+    from .side_by_side import LIMITS, NOTICE, header_lines
 
     document = _document()
     document.add_heading("Machine translation for language triage", level=1)
     document.add_paragraph().add_run(NOTICE).bold = True
+    document.add_paragraph().add_run(LIMITS).italic = True
     for line in header_lines(triage):
         document.add_paragraph(clean(line))
     marks = triage.all_marked()

@@ -43,6 +43,16 @@ NOTICE = (
 )
 
 
+# What a reader must not conclude from finding nothing marked.
+LIMITS = (
+    "What this cannot see: a short message in another language that is written "
+    "in Latin letters (Spanish, French, Indonesian) can pass as English, and so "
+    "does a language typed in Latin letters instead of its own script (pinyin, "
+    "Arabic chat spelling). Finding no foreign-language text does not show "
+    "there is none."
+)
+
+
 @dataclass
 class Marked:
     """A foreign passage, its number on its page, and its translation."""
@@ -97,7 +107,9 @@ class Triage:
     def summary(self) -> str:
         """One or two sentences for a status line."""
         if not self.marked:
-            return "Found no foreign-language text to translate."
+            return (
+                "Found no foreign-language text to translate." + self._pictures_note()
+            )
         text = (
             f"Foreign-language text on {len(self.marked)} of {len(self.pages)} page(s)."
         )
@@ -110,7 +122,21 @@ class Triage:
             text += (
                 f" No language pack for {', '.join(missing)}: marked, not translated."
             )
-        return text
+        return text + self._pictures_note()
+
+    def unread_pictures(self) -> Tuple[int, List[int]]:
+        """How many pictures were not read for text, and their page indexes."""
+        pages = [p for p in self.pages if p.pictures and not p.pictures_read]
+        return sum(len(p.pictures) for p in pages), [p.index for p in pages]
+
+    def _pictures_note(self) -> str:
+        count, pages = self.unread_pictures()
+        if not count:
+            return ""
+        return (
+            f" {count} picture(s) on {len(pages)} page(s) were not read: any "
+            "text in them is not covered."
+        )
 
 
 def page_list(indexes: Sequence[int]) -> str:
@@ -240,13 +266,20 @@ def translate_pdf(
     installed: set,
     names: Optional[Dict[str, str]] = None,
     ocr_lang: Optional[str] = None,
+    pictures: bool = False,
     progress: Optional[ProgressCallback] = None,
     on_progress: Optional[DocumentProgress] = None,
     cancelled: Optional[CancelCallback] = None,
     translator_for: Optional[Callable[[str], object]] = None,
 ) -> Triage:
     """Find and translate the foreign passages of the PDF at ``source``."""
-    pages = read_pdf(source, lang=ocr_lang, progress=progress, cancelled=cancelled)
+    pages = read_pdf(
+        source,
+        lang=ocr_lang,
+        pictures=pictures,
+        progress=progress,
+        cancelled=cancelled,
+    )
     return translate_pages(
         source,
         pages,
@@ -287,6 +320,19 @@ def header_lines(triage: Triage) -> List[str]:
         lines.append(
             f"Read from images with OCR: page(s) {page_list([p.index for p in scanned])}"
         )
+    read = [page for page in triage.pages if page.pictures and page.pictures_read]
+    if read:
+        lines.append(
+            f"Pictures read with OCR: {sum(len(p.pictures) for p in read)}, on "
+            f"page(s) {page_list([p.index for p in read])}"
+        )
+    count, unread = triage.unread_pictures()
+    if count:
+        lines.append(
+            f"Pictures NOT read: {count}, on page(s) {page_list(unread)}. Any text "
+            "in them (a screenshot, a photographed document) is not in this "
+            "translation."
+        )
     lines.append(f"Produced: {triage.produced.strftime('%Y-%m-%d %H:%M %Z').strip()}")
     lines += [f"{what}: {version}" for what, version in triage.software]
     return lines
@@ -294,7 +340,7 @@ def header_lines(triage: Triage) -> List[str]:
 
 def render_text(triage: Triage) -> str:
     """Every marked passage with its translation, page by page."""
-    lines = ["Machine translation for language triage", "", NOTICE, ""]
+    lines = ["Machine translation for language triage", "", NOTICE, "", LIMITS, ""]
     lines += header_lines(triage)
     for page in sorted(triage.marked):
         lines += ["", f"──────── Page {page + 1} ────────"]
@@ -404,7 +450,18 @@ class _Pdf:
             lines.append(line)
         return lines
 
-    def text(self, page, text: str, x: float, y: float, font, size: float, rgb=_BLACK):
+    def text(
+        self,
+        page,
+        text: str,
+        x: float,
+        y: float,
+        font,
+        size: float,
+        rgb=_BLACK,
+        turn: Tuple[float, float, float, float] = (1.0, 0.0, 0.0, 1.0),
+    ):
+        """Draw ``text`` from (x, y); ``turn`` is the rotation part of its matrix."""
         raw = self.raw
         obj = raw.FPDFPageObj_CreateTextObj(self.doc.raw, font, ctypes.c_float(size))
         data = (_latin(text) + "\0").encode("utf-16-le")
@@ -412,7 +469,7 @@ class _Pdf:
         self._buffers.append(buffer)
         raw.FPDFText_SetText(obj, ctypes.cast(buffer, raw.FPDF_WIDESTRING))
         raw.FPDFPageObj_SetFillColor(obj, *rgb, 255)
-        raw.FPDFPageObj_Transform(obj, 1, 0, 0, 1, x, y)
+        raw.FPDFPageObj_Transform(obj, *turn, x, y)
         raw.FPDFPage_InsertObject(page.raw, obj)
 
     def rect(self, page, box: Box, rgba, stroke: Optional[Tuple[int, int, int]] = None):
@@ -512,9 +569,11 @@ def _summary_page(out: _Pdf, triage: Triage, width: float, height: float) -> Non
         "and were not translated. Text in English, and pages with no "
         "foreign-language text, were left as they are and are not repeated here."
     )
-    for wrapped in out.wrap(how, out.regular, 9.5, text_width):
-        out.text(page, wrapped, _MARGIN, y, out.regular, 9.5, _GREY)
-        y -= 12.5
+    for paragraph in (how, LIMITS):
+        for wrapped in out.wrap(paragraph, out.regular, 9.5, text_width):
+            out.text(page, wrapped, _MARGIN, y, out.regular, 9.5, _GREY)
+            y -= 12.5
+        y -= 6
     _footer(out, page, triage)
     page.gen_content()
     page.close()

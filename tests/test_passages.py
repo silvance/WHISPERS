@@ -100,3 +100,62 @@ def test_ocr_boxes_become_pdf_points_from_the_bottom():
     )
     assert passage.page == 2 and passage.script == "han"
     assert passage.box == pytest.approx((72, 792 - 158.4, 216, 792 - 144))
+
+
+# -- Where a box is shown ----------------------------------------------------
+
+PORTRAIT = (0.0, 0.0, 612.0, 792.0)
+
+
+def test_a_box_is_measured_from_the_corner_of_what_is_shown():
+    from whispers.passages import shown
+
+    # A page whose own coordinates start at (40, 60).
+    assert shown((140, 160, 240, 172), (40, 60, 652, 852), 0) == (100, 100, 200, 112)
+
+
+def test_a_box_follows_the_page_when_it_is_turned_for_showing():
+    from whispers.passages import shown
+
+    box = (100.0, 700.0, 300.0, 712.0)  # near the top left of an upright page
+    # Turned a quarter clockwise, the top left goes to the top right.
+    assert shown(box, PORTRAIT, 90) == (700.0, 312.0, 712.0, 512.0)
+    assert shown(box, PORTRAIT, 180) == (312.0, 80.0, 512.0, 92.0)
+    # Turned a quarter the other way, it goes to the bottom left.
+    assert shown(box, PORTRAIT, 270) == (80.0, 100.0, 92.0, 300.0)
+
+
+def test_text_set_sideways_is_read_along_its_lines():
+    from whispers.passages import _text_turn, _turned
+
+    across = _line("meet at nine", 100, 700)
+    assert _text_turn(across) == 0
+    # The same line running up the page, and down it.
+    up = [
+        (ch, None if b is None else (b[1], b[0], b[3], b[2]), s) for ch, b, s in across
+    ]
+    down = [
+        (ch, None if b is None else (b[1], -b[2], b[3], -b[0]), s)
+        for ch, b, s in across
+    ]
+    assert _text_turn(up) == 90 and _text_turn(down) == 270
+    box = (10.0, 20.0, 110.0, 32.0)
+    for turn in (90, 270):
+        assert _turned(_turned(box, turn), turn, back=True) == box
+        (segment,) = _segments(
+            [
+                (ch, None if b is None else _turned(b, turn), s)
+                for ch, b, s in (up if turn == 90 else down)
+            ]
+        )
+        assert segment.text == "meet at nine"
+
+
+def test_a_picture_cut_out_of_a_page_keeps_its_place_on_it():
+    # A paragraph 30 px into a picture whose corner is 600 px across, 300 down.
+    (passage,) = ocr_passages(
+        [("会议", (30, 60, 330, 120))], page=0, height=792, dpi=300, origin=(600, 300)
+    )
+    assert passage.box == pytest.approx(
+        (630 * 0.24, 792 - 420 * 0.24, 930 * 0.24, 792 - 360 * 0.24)
+    )

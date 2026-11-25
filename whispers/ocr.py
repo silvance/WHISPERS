@@ -54,6 +54,7 @@ _TESSERACT_LANG = {
     "ar": "ara",
     "ru": "rus",
     "zh": "chi_sim",
+    "zt": "chi_tra",
     "fa": "fas",
     "uk": "ukr",
     "he": "heb",
@@ -94,6 +95,13 @@ _OSD_SCRIPTS = {
 }
 # Other language data that reads the same script, tried in turn when the
 # usual one is not in this copy.
+#
+# Chinese left to be detected is read with Simplified data, also when it is
+# printed in Traditional characters: each of the two reads the other's print
+# and writes it in its own characters (on a test page, Simplified data got
+# about 5 characters in 80 of Traditional print wrong), and nothing measured
+# here tells the two kinds of print apart reliably. For Traditional print,
+# choosing Chinese (traditional) reads it with its own data.
 _SAME_SCRIPT = {
     "ara": ("fas", "urd", "pus"),
     "rus": ("ukr",),
@@ -294,9 +302,15 @@ def _second_script(pytesseract, image, lang: str, found: List[str]) -> Optional[
     are tried on just them first, then this copy's other non-Latin
     languages, and the one that reads them well is returned.
     """
-    candidates = sorted(
-        (installed_ocr_languages() & _OTHER_SCRIPTS) - set(lang.split("+"))
-    )
+    using = set(lang.split("+"))
+    candidates = sorted((installed_ocr_languages() & _OTHER_SCRIPTS) - using)
+    # One language for each script: Farsi data reads the lines Arabic data
+    # reads, and no better, so the first of them this copy has stands for
+    # the script, and none is tried where one is already in use.
+    for first, others in _SAME_SCRIPT.items():
+        group = [name for name in (first, *others) if name in candidates]
+        keep = [] if using & {first, *others} else group[:1]
+        candidates = [name for name in candidates if name not in group or name in keep]
     if not candidates:
         return None
     data = pytesseract.image_to_data(
@@ -347,10 +361,30 @@ def _reading_lang(pytesseract, image, lang: Optional[str], found: List[str]) -> 
     return f"{other}+{chosen}" if other is not None else chosen
 
 
+def _for_reading(image):
+    """``image`` in greys with its contrast stretched: what is given to Tesseract.
+
+    Given the colours, Tesseract loses text on a coloured ground: of a chat
+    screenshot it read the white bubbles and none of the green ones, and all
+    of them from a grey copy. The stretch is the plain one, darkest to black
+    and lightest to white: clipping the ends of the range (a cutoff) takes
+    the print itself for an outlier on a clean page, and nothing is read.
+    Anything that is not a Pillow image is read as it is.
+    """
+    try:
+        from PIL import Image, ImageOps
+    except ImportError:
+        return image
+    if not isinstance(image, Image.Image):
+        return image
+    return ImageOps.autocontrast(ImageOps.grayscale(image))
+
+
 def _ocr_image(image, lang: Optional[str], found: Optional[List[str]] = None) -> str:
     """OCR a Pillow image with Tesseract and return stripped text."""
     pytesseract = _configure_pytesseract()
     _ensure_tessdata_prefix()
+    image = _for_reading(image)
     chosen = _reading_lang(pytesseract, image, lang, [] if found is None else found)
     return pytesseract.image_to_string(image, lang=chosen).strip()
 
@@ -361,17 +395,24 @@ OcrParagraph = Tuple[str, Tuple[int, int, int, int]]
 
 
 def ocr_paragraphs(
-    image, lang: Optional[str], found: Optional[List[str]] = None
+    image,
+    lang: Optional[str],
+    found: Optional[List[str]] = None,
+    *,
+    min_confidence: float = 0.0,
 ) -> Tuple[str, List[OcrParagraph]]:
     """The paragraphs on a scanned page and where they are, for marking them.
 
     Returns the Tesseract language string used and the paragraphs in the
-    order Tesseract read them. Words of Chinese, Japanese and Korean are
-    joined without spaces.
+    order Tesseract read them. Words of Chinese and Japanese are joined
+    without spaces. A paragraph read with less average confidence than
+    ``min_confidence`` (0-100) is left out: what OCR makes of a photograph of
+    something other than text.
     """
 
     pytesseract = _configure_pytesseract()
     _ensure_tessdata_prefix()
+    image = _for_reading(image)
     chosen = _reading_lang(pytesseract, image, lang, [] if found is None else found)
     data = pytesseract.image_to_data(
         image, lang=chosen, output_type=pytesseract.Output.DICT
@@ -382,16 +423,17 @@ def ocr_paragraphs(
         if not word:
             continue
         key = (data["block_num"][i], data["par_num"][i])
-        line = data["line_num"][i]
         box = (
             data["left"][i],
             data["top"][i],
             data["left"][i] + data["width"][i],
             data["top"][i] + data["height"][i],
         )
-        paragraphs.setdefault(key, []).append((line, word, box))
+        paragraphs.setdefault(key, []).append((float(data["conf"][i]), word, box))
     out: List[OcrParagraph] = []
     for words in paragraphs.values():
+        if sum(c for c, _, _ in words) / len(words) < min_confidence:
+            continue
         text = ""
         for _, word, _ in words:
             text = join_wrapped(text, word) if text else word

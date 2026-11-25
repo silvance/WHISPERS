@@ -18,7 +18,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
 
-from .documents import LANGUAGE_NAMES, Section, choose_language
+from .documents import (
+    LANGUAGE_NAMES,
+    Section,
+    choose_language,
+    foreign_runs,
+    latin_languages,
+)
 from .transcription import CancelCallback, CancelledError, ProgressCallback
 
 PathLike = Union[str, Path]
@@ -47,7 +53,9 @@ def _argos_translate():
 # for its packs; normalise them so a detected language maps to an installed pack.
 _DETECT_ALIASES = {
     "zh-cn": "zh",
-    "zh-tw": "zh",
+    # Traditional characters have a pack of their own (zt); where it is not
+    # installed, the Simplified one is used for all Chinese.
+    "zh-tw": "zt",
 }
 
 
@@ -73,20 +81,45 @@ def detect_language(text: str) -> Optional[str]:
     return _DETECT_ALIASES.get(code, code)
 
 
-def detect_language_scores(text: str) -> List[Tuple[str, float]]:
+_detectors = None
+
+
+def _detector_factory():
+    """langdetect's detector factory, with its language profiles loaded once."""
+    global _detectors
+    if _detectors is None:
+        from langdetect import DetectorFactory
+        from langdetect.detector_factory import PROFILES_DIRECTORY
+
+        DetectorFactory.seed = 0  # the same answer for the same text, every run
+        factory = DetectorFactory()
+        factory.load_profile(PROFILES_DIRECTORY)
+        _detectors = factory
+    return _detectors
+
+
+def detect_language_scores(
+    text: str, among: Optional[Sequence[str]] = None
+) -> List[Tuple[str, float]]:
     """Likely languages of ``text`` with their probabilities, most likely first.
 
-    Empty when langdetect is missing or cannot tell (too little text).
+    With ``among``, only those languages are weighed against one another:
+    whether a few words are English or Spanish can be told where which of
+    fifty languages they are in cannot. Empty when langdetect is missing or
+    cannot tell (too little text).
     """
     if not text or not text.strip():
         return []
     try:
-        from langdetect import DetectorFactory, detect_langs
+        detector = _detector_factory().create()
     except ImportError:
         return []
-    DetectorFactory.seed = 0
     try:
-        found = detect_langs(text)
+        if among is not None:
+            codes = {code: alias for alias, code in _DETECT_ALIASES.items()}
+            detector.set_prior_map({codes.get(code, code): 1.0 for code in among})
+        detector.append(text)
+        found = detector.get_probabilities()
     except Exception:  # noqa: BLE001 - langdetect raises LangDetectException
         return []
     return [(_DETECT_ALIASES.get(g.lang, g.lang), float(g.prob)) for g in found]
@@ -357,7 +390,9 @@ def translate_document(
     forced: Optional[str],
     installed: Set[str],
     names: Optional[Dict[str, str]] = None,
-    detect: Optional[Callable[[str], List[Tuple[str, float]]]] = detect_language_scores,
+    detect: Optional[
+        Callable[..., Sequence[Tuple[str, float]]]
+    ] = detect_language_scores,
     on_progress: Optional[DocumentProgress] = None,
     cancelled: Optional[CancelCallback] = None,
     removed: Sequence[str] = (),
@@ -371,6 +406,13 @@ def translate_document(
     translated. ``forced`` is the language chosen under From, or None for
     automatic detection. Progress reports how many paragraphs are done and,
     once there is a rate to go on, roughly how long is left.
+
+    Two things are judged on the document as a whole. Short lines in Latin
+    letters are read against the languages the rest of it shows (see
+    :func:`whispers.documents.latin_languages`). And a paragraph left as
+    English is still searched for a name or phrase in another script: that
+    run is translated where it stands, in square brackets, and the rest of
+    the paragraph is not touched.
     """
     make = translator_for or (lambda code: _make_translator(code, DEFAULT_TARGET))
     translators: Dict[str, object] = {}
@@ -378,14 +420,58 @@ def translate_document(
         names={**LANGUAGE_NAMES, **(names or {})}, removed=list(removed)
     )
 
-    plan: List[Tuple[Piece, Optional[str]]] = []
+    # Asked of the same text more than once: when the document is looked over
+    # as a whole, and again for each paragraph.
+    asked: Dict[Tuple[str, Optional[Tuple[str, ...]]], List[Tuple[str, float]]] = {}
+
+    def detector(text: str, among: Optional[Sequence[str]] = None):
+        assert detect is not None
+        key = (text, None if among is None else tuple(among))
+        if key not in asked:
+            asked[key] = list(detect(text) if among is None else detect(text, among))
+        return asked[key]
+
+    detecting = detector if detect is not None else None
+    texts = [paragraph for section in sections for paragraph in section.paragraphs]
+    texts += [
+        value
+        for section in sections
+        for label, value in section.fields
+        if label in TRANSLATED_FIELDS
+    ]
+    present = latin_languages(texts, forced=forced, detect=detecting)
+
+    def language(text: str) -> Tuple[Optional[str], str]:
+        return choose_language(
+            text,
+            forced=forced,
+            installed=installed,
+            detect=detecting,
+            present=present,
+        )
+
+    # What is to be translated: (piece, the spans of it to translate, each
+    # with its language). One span over the whole of it, or the runs in
+    # another script inside a paragraph that is otherwise left alone.
+    Span = Tuple[int, int, str]
+    plan: List[Tuple[Piece, List[Span]]] = []
 
     def route(text: str) -> Piece:
-        code, missing = choose_language(
-            text, forced=forced, installed=installed, detect=detect
-        )
+        code, missing = language(text)
         piece = Piece(original=text, text=text, missing=missing or None)
-        plan.append((piece, code))
+        if code is not None:
+            plan.append((piece, [(0, len(text), code)]))
+        elif not missing:
+            spans: List[Span] = []
+            for start, end, _ in foreign_runs(text):
+                run_code, run_missing = language(text[start:end])
+                if run_code is not None:
+                    spans.append((start, end, run_code))
+                elif run_missing and piece.missing is None:
+                    piece.missing = run_missing
+            if spans:
+                piece.missing = None
+                plan.append((piece, spans))
         return piece
 
     for section in sections:
@@ -398,34 +484,50 @@ def translate_document(
         out.paragraphs = [route(paragraph) for paragraph in section.paragraphs]
         document.sections.append(out)
 
-    work = [(piece, code) for piece, code in plan if code is not None]
-    total_chars = sum(len(piece.original) for piece, _ in work) or 1
-    done_chars = 0
-    started = time.monotonic()
     # A chat report repeats itself ("[图片]", system messages, quoted
     # replies): each distinct passage is translated once.
     done: Dict[Tuple[str, str], str] = {}
-    for index, (piece, code) in enumerate(work):
-        if cancelled is not None and cancelled():
-            raise CancelledError("Translation cancelled.")
-        assert code is not None
-        key = (code, piece.original)
+
+    def translated(code: str, text: str) -> str:
+        key = (code, text)
         if key not in done:
             translator = translators.get(code)
             if translator is None:
                 translator = translators[code] = make(code)
             parts = [
                 translator.translate(chunk) if chunk.strip() else chunk  # type: ignore[attr-defined]
-                for chunk in _chunk_text(piece.original)
+                for chunk in _chunk_text(text)
             ]
-            done[key] = "".join(parts).strip() or piece.original
-        piece.text = done[key]
-        piece.language = code
-        done_chars += len(piece.original)
+            done[key] = "".join(parts).strip() or text
+        return done[key]
+
+    def size(spans: List[Span]) -> int:
+        return sum(end - start for start, end, _ in spans)
+
+    total_chars = sum(size(spans) for _, spans in plan) or 1
+    done_chars = 0
+    started = time.monotonic()
+    for index, (piece, spans) in enumerate(plan):
+        if cancelled is not None and cancelled():
+            raise CancelledError("Translation cancelled.")
+        original = piece.original
+        if spans == [(0, len(original), spans[0][2])]:
+            piece.text = translated(spans[0][2], original)
+        else:
+            parts, last = [], 0
+            for start, end, code in spans:
+                parts += [
+                    original[last:start],
+                    f"[{translated(code, original[start:end])}]",
+                ]
+                last = end
+            piece.text = "".join(parts) + original[last:]
+        piece.language = spans[0][2]
+        done_chars += size(spans)
         if on_progress is not None:
             elapsed = time.monotonic() - started
             left: Optional[float] = None
             if elapsed >= 5 and done_chars:
                 left = elapsed * (total_chars - done_chars) / done_chars
-            on_progress(index + 1, len(work), left)
+            on_progress(index + 1, len(plan), left)
     return document

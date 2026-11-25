@@ -206,11 +206,21 @@ def test_a_batch_pdf_is_written_side_by_side(page, report_pdf, monkeypatch):
 
 def test_settings_are_remembered(page):
     tab, _, _, module = page
-    tab.apply_settings({"keep_original": True, "pdf_output": module.READING_COPY})
+    tab.apply_settings(
+        {
+            "keep_original": True,
+            "pdf_output": module.READING_COPY,
+            "read_pictures": True,
+        }
+    )
     assert tab.get_settings() == {
         "keep_original": True,
         "pdf_output": module.READING_COPY,
+        "read_pictures": True,
     }
+    # A copy that has never saved the newer settings keeps the defaults.
+    tab.apply_settings({})
+    assert tab.get_settings()["read_pictures"] is False
 
 
 def test_time_left_reads_in_words(page):
